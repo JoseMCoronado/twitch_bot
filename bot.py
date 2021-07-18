@@ -5,6 +5,7 @@ import irc.bot
 import requests
 import sqlite3
 import getpass
+import musicpd
 from counter import Counter
 
 conn = sqlite3.connect("bot.db")
@@ -13,6 +14,8 @@ conn.row_factory = sqlite3.Row
 
 class TwitchBot(irc.bot.SingleServerIRCBot):
     def __init__(self):
+        """ Connection to MPD """
+
         user_channel = input("User/Channel:")
         user_channel = user_channel.lower()
         update_creds = input("Update/Create Credentials (y/n):")
@@ -40,9 +43,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
         self.client_secret = credentials["client_secret"]
         self.client_id = credentials["client_id"]
         self.token = credentials["irc_token"]
-        #self.channel = "#" + client_user
-        self.channel = "#prosolis"
-        #self.channel = "#fantasticandrandomteam"
+        self.channel = "#" + client_user
         Counter("name", "game", "count", "count_type")
 
         print("Getting Access Token...")
@@ -114,7 +115,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
             "value"
         ]
         entry_user = self.typing_user(e)
-        if type_user == "mod" or entry_user == "GFPSolutions" or entry_user == "ZossyK":
+        if type_user == "mod" or entry_user == "GFPSolutions" or entry_user == "Prosolis":
             return True
         return False
 
@@ -132,14 +133,159 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
         }
         r = requests.get(url, headers=headers).json()
         return r
+    
+    def mpd_connect(self):
+        mpdcli = musicpd.MPDClient()
+        mpdcli.connect()
+        return mpdcli
+
 
     def do_command(self, e, cmd):
         c = self.connection
 
-        # TODO: USER STATUS IN THE STREAM? Essentially is someone is lurking it says they are lurking.
-        # TODO: Make all the dance messages, etc. Editable and maintainable from within the twitch chat
-        # TODO: Streamer sayings table.
+        """ START MPD COMMANDS
 
+        Example Song Dictionary
+        {
+            'file': 'circular_thoughts.xm.ogg',
+            'last-modified': '2021-07-17T21:28:04Z',
+            'title': 'Circular Thoughts',
+            'genre': 'Jazz',
+            'time': '179',
+            'duration': '178.660',
+            'pos': '0',
+            'id': '1'
+        }
+        """
+        
+        if cmd ==  "play":
+            if self.is_privaleged_user(e):
+                mpdcli = self.mpd_connect()
+                mpdcli.play()
+                mpdcli.disconnect()
+        if cmd ==  "stop":
+            if self.is_privaleged_user(e):
+                mpdcli = self.mpd_connect()
+                mpdcli.stop()
+                mpdcli.disconnect()
+        if cmd ==  "delete":
+            if self.is_privaleged_user(e):
+                parsed_message = e.arguments[0].split(" ")
+                if len(parsed_message) < 2:
+                    c.privmsg(
+                        self.channel,
+                        "Usage: `!delete [song id]",
+                    )
+                    return True
+                mpdcli = self.mpd_connect()
+                mpdcli.deleteid(parsed_message[1])
+                mpdcli.disconnect()
+        #if cmd ==  "add":
+        #    if self.is_privaleged_user(e):
+        #        mpdcli = self.mpd_connect()
+        #        mpdcli.addid("vince_kaichan_-_hometown_dreams.it",2)
+        #        mpdcli.disconnect()
+        if cmd ==  "shuffle":
+            if self.is_privaleged_user(e):
+                mpdcli = self.mpd_connect()
+                mpdcli.shuffle()
+                mpdcli.disconnect()
+        if cmd ==  "pause":
+            if self.is_privaleged_user(e):
+                mpdcli = self.mpd_connect()
+                mpdcli.pause()
+                mpdcli.disconnect()
+        if cmd ==  "next":
+            if self.is_privaleged_user(e):
+                mpdcli = self.mpd_connect()
+                mpdcli.next()
+                mpdcli.play()
+                mpdcli.disconnect()
+        if cmd ==  "playlist":
+            if self.is_privaleged_user(e):
+                mpdcli = self.mpd_connect()
+                mpdcli.iterate = True
+                songlist_message = ""
+                for song in mpdcli.playlistinfo():
+                    songlist_message += "| id(%s) pos(%s) title(%s)" % (song['id'],int(song['pos']), song['title'])
+                c.privmsg(self.channel, songlist_message)
+                mpdcli.disconnect()
+        if cmd ==  "searchadd":
+            mpdcli = self.mpd_connect()
+            parsed_message = e.arguments[0].split(" ")
+            if len(parsed_message) < 3:
+                c.privmsg(
+                    self.channel,
+                    "Usage: `!searchadd [type: any|Artist|Album|AlbumArtist|Title|Track|Name|Genre|Date|Composer|Performer|Comment|Disc] [string]",
+                )
+                return True
+            search_type = parsed_message[1]
+            search_string = parsed_message[2]
+            search_list = mpdcli.searchadd(search_type,search_string)
+            message = "Song added..."
+            c.privmsg(self.channel, message)
+
+        if cmd ==  "search":
+            mpdcli = self.mpd_connect()
+            parsed_message = e.arguments[0].split(" ")
+            if len(parsed_message) < 3:
+                c.privmsg(
+                    self.channel,
+                    "Usage: `!search [type: any|Artist|Album|AlbumArtist|Title|Track|Name|Genre|Date|Composer|Performer|Comment|Disc] [string]",
+                )
+                return True
+            search_type = parsed_message[1]
+            search_string = parsed_message[2]
+            search_list = mpdcli.search(search_type,search_string)
+            if search_list:
+                message = str(search_list)
+            else:
+                message = "No song found..."
+            c.privmsg(self.channel, message)
+        if cmd ==  "searchplaylist":
+            mpdcli = self.mpd_connect()
+            parsed_message = e.arguments[0].split(" ")
+            if len(parsed_message) < 3:
+                c.privmsg(
+                    self.channel,
+                    "Usage: `!searchplaylist [type: any|Artist|Album|AlbumArtist|Title|Track|Name|Genre|Date|Composer|Performer|Comment|Disc] [string]",
+                )
+                return True
+            search_type = parsed_message[1]
+            search_string = parsed_message[2]
+            search_list = mpdcli.playlistsearch(search_type,search_string)
+            if search_list:
+                next_song = search_list[0]
+                message = "Position: %s | %s | %s | ~ %s min| ID: %s" % (next_song['pos'],next_song['title'],next_song['genre'],round(float(next_song['time'])/60,2),next_song['id'])
+            else:
+                message = "No song found..."
+            c.privmsg(self.channel, message)
+        if cmd ==  "nextsong":
+            mpdcli = self.mpd_connect()
+            current_dict = mpdcli.currentsong()
+            current_song_pos = int(current_dict['pos'])
+            mpdcli.iterate = True
+            playlist = list(mpdcli.playlistinfo())
+            playlist_count = len(playlist) - 1
+            if current_song_pos >= playlist_count:
+                next_song_pos = '0'
+            else:
+                next_song_pos = str(current_song_pos + 1)
+            next_song = list(filter(lambda b: b['pos'] == next_song_pos, playlist))[0]
+            if len(next_song) >= 1:
+                next_song_message = "%s | %s | ~ %s min" % (next_song['title'],next_song['genre'],round(float(next_song['time'])/60,2))
+                c.privmsg(self.channel, next_song_message)
+            else:
+                c.privmsg(self.channel, "There isn't a next song...")
+            mpdcli.disconnect()
+
+        if cmd ==  "currentsong":
+            mpdcli = self.mpd_connect()
+            current_dict = mpdcli.currentsong()
+            curr_song_message = "%s | %s | ~ %s min" % (current_dict['title'],current_dict['genre'],round(float(current_dict['time'])/60,2))
+            c.privmsg(self.channel, curr_song_message)
+            mpdcli.disconnect()
+        """ END MPD COMMANDS """
         # Provide List of commands
         if cmd == "commands" or cmd == "command":
             command_message = "Mod Commands: !so | !newcounter | !updatecounter |"
@@ -480,6 +626,8 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 
 
 def main():
+
+    """ Connection to SQLite """
     c = conn.cursor()
     c.execute(
         """CREATE TABLE IF NOT EXISTS user (
@@ -490,6 +638,8 @@ def main():
                 )"""
     )
     conn.commit()
+
+    """ Connection to IRC"""
     bot = TwitchBot()
     bot.start()
 
