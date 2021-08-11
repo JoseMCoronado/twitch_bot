@@ -177,6 +177,18 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
                         songlist_message += "| id(%s) pos(%s) title(%s)" % (song['id'],int(song['pos']), song['title'])
                     c.privmsg(self.channel, songlist_message)
                     mpdcli.disconnect()
+            if cmd ==  "sr":
+                mpdcli = mpd_connect()
+                parsed_message = e.arguments[0].split(" ")
+                if len(parsed_message) < 2:
+                    c.privmsg(
+                        self.channel,
+                        "Usage: `!sr [string]",
+                    )
+                    return True
+                search_string = parsed_message[1]
+                search_list = mpdcli.searchadd("any",search_string)
+                message = "Song added..."
             if cmd ==  "searchadd":
                 mpdcli = mpd_connect()
                 parsed_message = e.arguments[0].split(" ")
