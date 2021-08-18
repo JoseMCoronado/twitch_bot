@@ -1,6 +1,8 @@
 from datetime import datetime
 import threading
 import random
+import logging
+import time
 import re
 import sys
 import irc.bot
@@ -9,10 +11,35 @@ import sqlite3
 import musicpd
 from flask import Flask, render_template, jsonify
 
+_logger = logging.getLogger(__name__)
+
 app = Flask(__name__, static_folder='./static')
 
 DATABASE = "bot.db"
 
+
+class Listener():
+    def __init__(self):
+        print("Starting Listenter...")
+    
+    def check_add_rand_song(self):
+        mpdcli = mpd_connect()
+        mpdcli.iterate = True
+        if len(list(mpdcli.playlistinfo())) <= 1:
+            song_list = list(mpdcli.listfiles())
+            if not song_list:
+                raise Warning("There are no songs configured in the music directory of MPD...")
+            selected_song_int = random.randint(0,len(song_list)-1)
+            selected_song = song_list[selected_song_int]
+            mpdcli.add(selected_song['file'])
+            message = "Listener: Adding %s since there is only 1 song left in the queue." % (selected_song['file'])
+            print(message)
+        mpdcli.disconnect()
+
+    def start(self):
+        while True:
+            self.check_add_rand_song()
+            time.sleep(10)
 
 class TwitchBot(irc.bot.SingleServerIRCBot):
     def __init__(self):
@@ -117,14 +144,6 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
         r = requests.get(url, headers=headers).json()
         return r
     
-    def stop():
-        print("WHAHKJSHDKJASHDJKS")
-        print("WHAHKJSHDKJASHDJKS")
-        print("WHAHKJSHDKJASHDJKS")
-        print("WHAHKJSHDKJASHDJKS")
-        print("WHAHKJSHDKJASHDJKS")
-        print("WHAHKJSHDKJASHDJKS")
-
     def do_command(self, e, cmd):
         try:
             c = self.connection
@@ -647,6 +666,33 @@ def playlist():
     mpdcli.disconnect()
     return render_template("playlist.html",rows = rows)
 
+@app.route('/songrequest')
+def songrequest():
+    return render_template("song_request.html")
+
+@app.route('/nextfive')
+def nextfive():
+    return render_template("nextfive.html")
+
+@app.route('/showcurrentsong')
+def showcurrentsong():
+    return render_template("currentsong.html")
+
+@app.route('/nextfivecontent')
+def nextfivecontent():
+    mpdcli = mpd_connect()
+    data = mpdcli.playlistinfo()
+    mpdcli.disconnect()
+    song_array =  data[:5]
+    song_count = len(song_array)
+    nextfivetext = ""
+    for i in range(0,song_count):
+        index = i + 1
+        blurb = "%s. %s - %s " % (index, song_array[i]['title'], song_array[i]['genre'])
+        nextfivetext += blurb
+    data = nextfivetext
+    return jsonify(data)
+
 @app.route('/playlist_table')
 def playlist_table():
     mpdcli = mpd_connect()
@@ -693,17 +739,24 @@ def init_irc():
     bot = TwitchBot()
     bot.start()
 
+def init_listener():
+    listener = Listener()
+    listener.start()
+
 def runFlaskApp():
     app.run(host='127.0.0.1', port=5000, debug=False, threaded=True)
 
 def main():
     t1 = threading.Thread(target=runFlaskApp)
     t2 = threading.Thread(target=init_irc)
+    t3 = threading.Thread(target=init_listener)
     t2.setDaemon(True)
-    t2.setName("flask")
+    t1.setName("flask")
     t2.setName("irc")
+    t3.setName("irc")
     t1.start()
     t2.start()
+    t3.start()
 
 if __name__ == "__main__":
     main()

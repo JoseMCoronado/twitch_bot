@@ -1,0 +1,28 @@
+.nextFiveContent {
+
+    height: 70px;
+    overflow: hidden;
+    position: relative;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 25px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    left: 125px;
+}
+.nextFiveContent span{
+    position:absolute;
+    width: 150%;
+    margin: 0;
+    font-weight: 700;
+    text-align: left;
+
+    transform: translateX(100%);
+    animation: moving 15s linear infinite;
+}
+
+@keyframes moving{
+    0%{transform: translateX(100%)}
+    100%{transform: translateX(-100%)}
+}
